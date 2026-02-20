@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalTrace — Earnings Call Anomaly Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080806;
+  --surface: #0e0d09;
+  --surface2: #141310;
+  --surface3: #1a1915;
+  --amber: #f0a500;
+  --amber-dim: rgba(240,165,0,0.10);
+  --amber-glow: rgba(240,165,0,0.22);
+  --amber-bright: #ffc340;
+  --red: #e84040;
+  --red-dim: rgba(232,64,64,0.12);
+  --green: #38c172;
+  --green-dim: rgba(56,193,114,0.12);
+  --blue: #4a9eff;
+  --blue-dim: rgba(74,158,255,0.10);
+  --white: #f0ead8;
+  --muted: #5a5540;
+  --muted2: #3a3520;
+  --border: rgba(240,165,0,0.10);
+  --border2: rgba(240,165,0,0.18);
+  --mono: 'Syne Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--mono);
+  background: var(--bg);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* CRT flicker */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none; z-index: 9998;
+}
+
+/* Corner glow */
+body::after {
+  content: '';
+  position: fixed;
+  top: -200px; right: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(240,165,0,0.04) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── HEADER ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border2);
+  padding: 0 32px;
+  display: flex; align-items: stretch; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+
+.header-left {
+  display: flex; align-items: center; gap: 24px;
+  padding: 14px 0;
+}
+
+.logo {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.logo-top {
+  font-family: var(--display);
+  font-size: 1.15rem; font-weight: 800;
+  color: var(--amber);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.logo-bottom {
+  font-size: 0.55rem;
+  color: var(--muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.header-divider { width: 1px; background: var(--border); height: 32px; }
+
+.ticker-strip {
+  display: flex; gap: 20px; align-items: center;
+  font-size: 0.65rem; color: var(--muted);
+}
+.ticker-item { display: flex; gap: 6px; align-items: center; }
+.ticker-sym { color: var(--amber); font-weight: 500; }
+.ticker-up { color: var(--green); }
+.ticker-dn { color: var(--red); }
+
+.header-right {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 0;
+}
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.6rem; letter-spacing: 2px;
+  color: var(--green); text-transform: uppercase;
+}
+.live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: blink 1.5s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.time-display { font-size: 0.65rem; color: var(--muted); letter-spacing: 1px; }
+
+/* ── LAYOUT ── */
+.app { display: flex; min-height: calc(100vh - 53px); position: relative; z-index: 1; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+
+.nav-label {
+  font-size: 0.55rem; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--muted2);
+  padding: 16px 16px 6px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; margin: 1px 6px;
+  border-radius: 4px; cursor: pointer;
+  font-size: 0.72rem; color: var(--muted);
+  transition: all 0.15s; letter-spacing: 0.5px;
+}
+.nav-item:hover { background: var(--surface2); color: var(--white); }
+.nav-item.active { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(240,165,0,0.15); }
+.nav-icon { font-size: 0.8rem; }
+
+.sidebar-stat {
+  margin: auto 0 0;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+  font-size: 0.65rem;
+}
+.sidebar-stat-row:last-child { border-bottom: none; }
+.ss-label { color: var(--muted); }
+.ss-val { color: var(--amber); font-weight: 500; }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── COMMAND BAR ── */
+.command-bar {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.65rem; color: var(--muted);
+  letter-spacing: 1px;
+}
+.cmd-sep { color: var(--muted2); }
+
+/* ── PAGES ── */
+.page { display: none; flex: 1; overflow-y: auto; }
+.page.active { display: flex; flex-direction: column; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ── ANALYZE PAGE ── */
+.analyze-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  flex: 1;
+}
+
+.pane {
+  padding: 24px;
+  border-right: 1px solid var(--border);
+}
+.pane:last-child { border-right: none; }
+
+.pane-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.pane-title {
+  font-size: 0.6rem; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--amber);
+}
+.pane-badge {
+  font-size: 0.55rem; letter-spacing: 1.5px;
+  background: var(--amber-dim); color: var(--amber);
+  padding: 3px 8px; border-radius: 3px; text-transform: uppercase;
+}
+
+.field-label {
+  font-size: 0.58rem; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 7px; display: block;
+}
+
+.text-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--white);
+  outline: none;
+  transition: border-color 0.2s;
+  line-height: 1.6;
+  resize: vertical;
+}
+.text-input:focus { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber-dim); }
+.text-input::placeholder { color: var(--muted2); }
+
+.meta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.meta-field { display: flex; flex-direction: column; gap: 6px; }
+.meta-input {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 12px;
+  font-family: var(--mono); font-size: 0.75rem;
+  color: var(--white); outline: none;
+  transition: border-color 0.2s;
+}
+.meta-input:focus { border-color: var(--amber); }
+.meta-input::placeholder { color: var(--muted2); }
+select.meta-input option { background: #1a1915; }
+
+/* ── ANALYZE BUTTON ── */
+.analyze-btn-row {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; gap: 12px;
+}
+
+.analyze-btn {
+  flex: 1; padding: 13px 24px;
+  background: var(--amber); color: var(--bg);
+  border: none; border-radius: 4px;
+  font-family: var(--display);
+  font-size: 0.88rem; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px var(--amber-glow);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.analyze-btn:hover { background: var(--amber-bright); box-shadow: 0 6px 28px rgba(240,165,0,0.35); transform: translateY(-1px); }
+.analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.analysis-config {
+  display: flex; gap: 12px; align-items: center;
+}
+.config-chip {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.62rem; letter-spacing: 1px;
+  color: var(--muted); cursor: pointer;
+  padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 4px; transition: all 0.15s;
+}
+.config-chip.on { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+.config-chip:hover { border-color: var(--border2); color: var(--white); }
+
+/* ── RESULTS ── */
+.results-page-layout {
+  display: flex; flex-direction: column; flex: 1;
+}
+
+.results-header {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+
+.results-company {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.results-company-name {
+  font-family: var(--display);
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--white); letter-spacing: -0.3px;
+}
+.results-company-meta { font-size: 0.62rem; color: var(--muted); letter-spacing: 1px; }
+
+.signal-meters {
+  display: flex; gap: 16px;
+}
+.signal-meter {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-width: 80px;
+}
+.meter-val {
+  font-family: var(--display);
+  font-size: 1.5rem; font-weight: 800; line-height: 1;
+}
+.meter-label { font-size: 0.52rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.meter-red .meter-val { color: var(--red); }
+.meter-amber .meter-val { color: var(--amber); }
+.meter-green .meter-val { color: var(--green); }
+
+.results-actions { display: flex; gap: 8px; }
+.r-btn {
+  padding: 8px 14px; border-radius: 4px;
+  font-family: var(--mono); font-size: 0.68rem;
+  cursor: pointer; letter-spacing: 0.5px;
+  transition: all 0.15s; border: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.r-btn-amber { background: var(--amber); color: var(--bg); }
+.r-btn-amber:hover { background: var(--amber-bright); }
+.r-btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.r-btn-outline:hover { border-color: var(--border2); color: var(--white); }
+
+.results-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  flex: 1; overflow: hidden;
+}
+
+.anomalies-panel { padding: 20px; overflow-y: auto; border-right: 1px solid var(--border); }
+.sidebar-panel { padding: 20px; overflow-y: auto; }
+
+.panel-label {
+  font-size: 0.58rem; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--amber);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+}
+.panel-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Anomaly cards */
+.anomaly-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+.anomaly-card:hover { border-color: var(--border2); }
+.anomaly-card.severity-high { border-left: 3px solid var(--red); }
+.anomaly-card.severity-medium { border-left: 3px solid var(--amber); }
+.anomaly-card.severity-low { border-left: 3px solid var(--blue); }
+
+.anomaly-header {
+  padding: 12px 14px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.anomaly-type-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.severity-chip {
+  font-size: 0.55rem; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 3px; font-weight: 500;
+}
+.sev-high { background: var(--red-dim); color: var(--red); }
+.sev-medium { background: var(--amber-dim); color: var(--amber); }
+.sev-low { background: var(--blue-dim); color: var(--blue); }
+.anomaly-category { font-size: 0.6rem; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+
+.anomaly-title { font-family: var(--display); font-size: 0.9rem; font-weight: 600; line-height: 1.3; color: var(--white); }
+
+.signal-score {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex-shrink: 0;
+}
+.signal-num {
+  font-family: var(--display);
+  font-size: 1.3rem; font-weight: 800; line-height: 1;
+}
+.signal-label { font-size: 0.52rem; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; }
+
+.anomaly-body { padding: 0 14px 14px; }
+.anomaly-comparison {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+}
+.comparison-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 12px;
+}
+.comp-label { font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.comp-text { font-size: 0.78rem; line-height: 1.6; color: var(--white); font-style: italic; }
+.comp-prev .comp-text { color: var(--muted); }
+
+.anomaly-insight {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 12px;
+  font-size: 0.75rem; line-height: 1.65;
+  color: rgba(240,234,216,0.75);
+}
+.insight-label { font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase; color: var(--amber); margin-bottom: 5px; }
+
+/* ── SIDEBAR PANELS ── */
+.tone-chart { margin-bottom: 20px; }
+.tone-bar-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 7px; font-size: 0.68rem;
+}
+.tone-bar-label { width: 80px; color: var(--muted); font-size: 0.62rem; }
+.tone-bar-track { flex: 1; height: 8px; background: var(--surface); border-radius: 2px; overflow: hidden; position: relative; }
+.tone-bar-prev { height: 100%; border-radius: 2px; background: var(--muted2); position: absolute; top: 0; left: 0; }
+.tone-bar-curr { height: 100%; border-radius: 2px; background: var(--amber); position: absolute; top: 0; left: 0; transition: width 1s ease; }
+.tone-bar-vals { font-size: 0.6rem; color: var(--muted); white-space: nowrap; }
+.tone-bar-delta { font-size: 0.6rem; }
+.delta-up { color: var(--red); }
+.delta-dn { color: var(--green); }
+.delta-neu { color: var(--muted); }
+
+.word-list { display: flex; flex-direction: column; gap: 6px; }
+.word-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px; font-size: 0.7rem;
+}
+.word-item-text { color: var(--white); }
+.word-item-change {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 0.62rem; letter-spacing: 0.5px;
+}
+.wi-added { color: var(--green); }
+.wi-removed { color: var(--red); }
+.wi-neutral { color: var(--muted); }
+
+/* Summary box */
+.summary-box {
+  background: var(--amber-dim);
+  border: 1px solid rgba(240,165,0,0.2);
+  border-radius: 6px; padding: 14px 16px;
+  margin-bottom: 20px;
+}
+.summary-text { font-size: 0.78rem; line-height: 1.7; color: var(--white); }
+
+/* ── HISTORY PAGE ── */
+.history-container { padding: 24px; }
+.h-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px 20px;
+  margin-bottom: 10px; cursor: pointer;
+  transition: border-color 0.15s;
+  display: flex; align-items: center; gap: 20px;
+}
+.h-item:hover { border-color: var(--border2); }
+.h-company { font-family: var(--display); font-size: 0.95rem; font-weight: 600; flex: 1; }
+.h-meta { font-size: 0.62rem; color: var(--muted); letter-spacing: 0.5px; }
+.h-score { font-family: var(--display); font-size: 1.2rem; font-weight: 800; }
+.h-badges { display: flex; gap: 6px; }
+.h-badge { font-size: 0.58rem; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; }
+
+/* ── LOADING ── */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(8,8,6,0.92);
+  backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 20px;
+}
+.loading-overlay.show { display: flex; }
+.loading-logo { font-family: var(--display); font-size: 2rem; font-weight: 800; color: var(--amber); letter-spacing: 4px; animation: pulse2 1.5s infinite; }
+@keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.loading-status { font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); }
+.loading-bar { width: 240px; height: 2px; background: var(--surface3); border-radius: 1px; overflow: hidden; }
+.loading-fill { height: 100%; background: var(--amber); animation: lf 1.6s ease-in-out infinite; }
+@keyframes lf { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--surface2); color: var(--white);
+  border: 1px solid var(--border2);
+  padding: 10px 16px; border-radius: 4px;
+  font-size: 0.72rem; letter-spacing: 0.5px; z-index: 999;
+  display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.toast.show { display: block; animation: fadeIn 0.2s ease; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .analyze-layout { grid-template-columns: 1fr; }
+  .results-body { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .signal-meters { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-logo">SIGNAL</div>
+  <div class="loading-status" id="loadingStatus">INITIALIZING ANALYSIS ENGINE...</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <div class="logo">
+      <div class="logo-top">SignalTrace</div>
+      <div class="logo-bottom">Earnings Intelligence</div>
+    </div>
+    <div class="header-divider"></div>
+    <div class="ticker-strip">
+      <div class="ticker-item"><span class="ticker-sym">SPX</span> <span class="ticker-up">▲ 0.31%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">NDX</span> <span class="ticker-up">▲ 0.48%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">VIX</span> <span class="ticker-dn">▼ 14.2</span></div>
+      <div class="ticker-item"><span class="ticker-sym">10Y</span> <span>4.31%</span></div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    <div class="header-divider"></div>
+    <div class="time-display" id="clockDisplay">--:--:-- ET</div>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="nav-label">Analysis</div>
+    <div class="nav-item active" onclick="showPage('analyze')"><span class="nav-icon">◈</span> New Analysis</div>
+    <div class="nav-item" onclick="showPage('results')" id="navResults" style="display:none"><span class="nav-icon">▦</span> Current Results</div>
+    <div class="nav-item" onclick="showPage('history')"><span class="nav-icon">◷</span> History</div>
+    <div class="nav-label">Signal Types</div>
+    <div class="nav-item" style="cursor:default;opacity:0.5"><span class="nav-icon">◆</span> Language Shift</div>
+    <div class="nav-item" style="cursor:default;opacity:0.5"><span class="nav-icon">◆</span> Topic Avoidance</div>
+    <div class="nav-item" style="cursor:default;opacity:0.5"><span class="nav-icon">◆</span> Sentiment Delta</div>
+    <div class="nav-item" style="cursor:default;opacity:0.5"><span class="nav-icon">◆</span> Hedging Language</div>
+    <div class="nav-item" style="cursor:default;opacity:0.5"><span class="nav-icon">◆</span> Confidence Markers</div>
+    <div class="sidebar-stat">
+      <div class="sidebar-stat-row"><span class="ss-label">Analyses Run</span><span class="ss-val" id="ssStat1">0</span></div>
+      <div class="sidebar-stat-row"><span class="ss-label">Anomalies Found</span><span class="ss-val" id="ssStat2">0</span></div>
+      <div class="sidebar-stat-row"><span class="ss-label">High Severity</span><span class="ss-val" id="ssStat3">0</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="command-bar">
+      <span style="color:var(--amber)">SIGTR</span>
+      <span class="cmd-sep">/</span>
+      <span id="cmdPath">ANALYZE</span>
+      <span class="cmd-sep">›</span>
+      <span id="cmdSub">INPUT TRANSCRIPTS TO BEGIN</span>
+    </div>
+
+    <!-- PAGE: ANALYZE -->
+    <div class="page active" id="page-analyze">
+      <div class="analyze-layout" style="flex:1">
+        <!-- PREVIOUS QUARTER -->
+        <div class="pane">
+          <div class="pane-header">
+            <div class="pane-title">◈ Previous Quarter Transcript</div>
+            <div class="pane-badge">T-1</div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-field">
+              <label class="field-label">Company / Ticker</label>
+              <input class="meta-input" type="text" id="companyName" placeholder="e.g. ACME Corp (ACME)" />
+            </div>
+            <div class="meta-field">
+              <label class="field-label">Quarter</label>
+              <input class="meta-input" type="text" id="prevQuarter" placeholder="e.g. Q2 2024" />
+            </div>
+          </div>
+          <label class="field-label">Paste Transcript</label>
+          <textarea class="text-input" id="prevTranscript" style="min-height:340px" placeholder="Paste the previous quarter's earnings call transcript here...
+
+Tip: Include both the prepared remarks and Q&A section for best results. Even a partial transcript works.
+
+Example content:
+— CEO prepared remarks
+— CFO financial overview
+— Q&A with analysts
+— Forward guidance statements"></textarea>
+        </div>
+
+        <!-- CURRENT QUARTER -->
+        <div class="pane">
+          <div class="pane-header">
+            <div class="pane-title">◈ Current Quarter Transcript</div>
+            <div class="pane-badge">T+0 · LATEST</div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-field">
+              <label class="field-label">Sector / Industry</label>
+              <select class="meta-input" id="sector">
+                <option value="technology">Technology</option>
+                <option value="financial-services">Financial Services</option>
+                <option value="healthcare">Healthcare</option>
+                <option value="consumer">Consumer / Retail</option>
+                <option value="industrials">Industrials</option>
+                <option value="energy">Energy</option>
+                <option value="real-estate">Real Estate</option>
+                <option value="telecom">Telecom / Media</option>
+              </select>
+            </div>
+            <div class="meta-field">
+              <label class="field-label">Quarter</label>
+              <input class="meta-input" type="text" id="currQuarter" placeholder="e.g. Q3 2024" />
+            </div>
+          </div>
+          <label class="field-label">Paste Transcript</label>
+          <textarea class="text-input" id="currTranscript" style="min-height:340px" placeholder="Paste the most recent earnings call transcript here...
+
+SignalTrace will compare language patterns, topic coverage, sentiment shifts, and rhetorical changes between both transcripts.
+
+Analysis detects:
+— Words added / removed from executive vocabulary
+— Topics mentioned previously but absent now
+— Changes in hedging and uncertainty language
+— Shifts in confidence and conviction levels
+— Analyst question evasion patterns"></textarea>
+        </div>
+      </div>
+
+      <!-- BOTTOM BAR -->
+      <div class="analyze-btn-row">
+        <div class="analysis-config">
+          <div class="config-chip on" id="chip-language" onclick="toggleChip(this)">◆ LANGUAGE</div>
+          <div class="config-chip on" id="chip-topics" onclick="toggleChip(this)">◆ TOPICS</div>
+          <div class="config-chip on" id="chip-sentiment" onclick="toggleChip(this)">◆ SENTIMENT</div>
+          <div class="config-chip on" id="chip-hedging" onclick="toggleChip(this)">◆ HEDGING</div>
+        </div>
+        <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">
+          ▶ RUN SIGNAL ANALYSIS
+        </button>
+      </div>
+    </div>
+
+    <!-- PAGE: RESULTS -->
+    <div class="page" id="page-results">
+      <div class="results-page-layout">
+        <!-- Results header -->
+        <div class="results-header">
+          <div class="results-company">
+            <div class="results-company-name" id="res-company">—</div>
+            <div class="results-company-meta" id="res-meta">— vs —</div>
+          </div>
+          <div class="signal-meters">
+            <div class="signal-meter" id="meter-overall">
+              <div class="meter-val" id="meter-overall-val">—</div>
+              <div class="meter-label">Risk Score</div>
+            </div>
+            <div class="signal-meter">
+              <div class="meter-val" id="meter-anomalies" style="color:var(--amber)">—</div>
+              <div class="meter-label">Anomalies</div>
+            </div>
+            <div class="signal-meter">
+              <div class="meter-val" id="meter-high" style="color:var(--red)">—</div>
+              <div class="meter-label">High Sev.</div>
+            </div>
+            <div class="signal-meter">
+              <div class="meter-val" id="meter-sentiment" style="color:var(--green)">—</div>
+              <div class="meter-label">Sentiment Δ</div>
+            </div>
+          </div>
+          <div class="results-actions">
+            <button class="r-btn r-btn-outline" onclick="copyResults()">⊡ EXPORT</button>
+            <button class="r-btn r-btn-outline" onclick="showPage('analyze')">← NEW ANALYSIS</button>
+          </div>
+        </div>
+
+        <!-- Results body -->
+        <div class="results-body">
+          <!-- Anomalies -->
+          <div class="anomalies-panel">
+            <div class="panel-label">DETECTED ANOMALIES</div>
+            <div class="summary-box">
+              <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:var(--amber);margin-bottom:6px">AI SUMMARY</div>
+              <div class="summary-text" id="res-summary">—</div>
+            </div>
+            <div id="anomaliesContainer"></div>
+          </div>
+
+          <!-- Right panel -->
+          <div class="sidebar-panel">
+            <div class="panel-label">TONE SHIFT ANALYSIS</div>
+            <div class="tone-chart" id="toneChart"></div>
+
+            <div class="panel-label" style="margin-top:8px">VOCABULARY CHANGES</div>
+            <div class="word-list" id="wordList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: HISTORY -->
+    <div class="page" id="page-history">
+      <div class="history-container">
+        <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:var(--amber);margin-bottom:20px">◷ ANALYSIS HISTORY</div>
+        <div id="historyContainer"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+const appState = {
+  history: JSON.parse(localStorage.getItem('st_history') || '[]'),
+  currentResult: null,
+};
+
+// ── CLOCK ──────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const h = String(et.getHours()).padStart(2, '0');
+  const m = String(et.getMinutes()).padStart(2, '0');
+  const s = String(et.getSeconds()).padStart(2, '0');
+  document.getElementById('clockDisplay').textContent = `${h}:${m}:${s} ET`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── NAV ────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+
+  const cmdMap = {
+    analyze: ['ANALYZE', 'INPUT TRANSCRIPTS TO BEGIN'],
+    results: ['RESULTS', appState.currentResult ? `${appState.currentResult.company} · ${appState.currentResult.anomalyCount} ANOMALIES DETECTED` : 'NO ACTIVE ANALYSIS'],
+    history: ['HISTORY', `${appState.history.length} ANALYSES STORED`],
+  };
+  const [path, sub] = cmdMap[name] || ['—', '—'];
+  document.getElementById('cmdPath').textContent = path;
+  document.getElementById('cmdSub').textContent = sub;
+
+  if (name === 'history') renderHistory();
+}
+
+function toggleChip(el) { el.classList.toggle('on'); }
+
+// ── ANALYZE ────────────────────────────────────────────────────
+async function runAnalysis() {
+  const prev = document.getElementById('prevTranscript').value.trim();
+  const curr = document.getElementById('currTranscript').value.trim();
+  const company = document.getElementById('companyName').value.trim() || 'Unknown Company';
+  const prevQ = document.getElementById('prevQuarter').value.trim() || 'Prior Quarter';
+  const currQ = document.getElementById('currQuarter').value.trim() || 'Current Quarter';
+  const sector = document.getElementById('sector').value;
+
+  if (!prev || !curr) {
+    const missing = !prev ? 'prevTranscript' : 'currTranscript';
+    document.getElementById(missing).style.borderColor = 'var(--red)';
+    setTimeout(() => document.getElementById(missing).style.borderColor = '', 1500);
+    showToast('PASTE BOTH TRANSCRIPTS TO PROCEED');
+    return;
+  }
+
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.classList.add('show');
+
+  const statusMsgs = [
+    'TOKENIZING TRANSCRIPTS...',
+    'EXTRACTING LINGUISTIC FEATURES...',
+    'RUNNING SENTIMENT DELTA ANALYSIS...',
+    'DETECTING TOPIC AVOIDANCE PATTERNS...',
+    'SCORING HEDGING LANGUAGE SHIFTS...',
+    'GENERATING ANOMALY SIGNALS...',
+    'COMPILING INTELLIGENCE REPORT...',
+  ];
+  let si = 0;
+  const statusInterval = setInterval(() => {
+    document.getElementById('loadingStatus').textContent = statusMsgs[si % statusMsgs.length];
+    si++;
+  }, 900);
+
+  const chips = {
+    language: document.getElementById('chip-language').classList.contains('on'),
+    topics: document.getElementById('chip-topics').classList.contains('on'),
+    sentiment: document.getElementById('chip-sentiment').classList.contains('on'),
+    hedging: document.getElementById('chip-hedging').classList.contains('on'),
+  };
+  const analysisTypes = Object.entries(chips).filter(([,v]) => v).map(([k]) => k).join(', ') || 'all';
+
+  // Trim to 4000 chars each — enough signal, avoids token issues
+  const MAX_CHARS = 4000;
+  const prevTrimmed = prev.length > MAX_CHARS ? prev.substring(0, MAX_CHARS) + ' [truncated]' : prev;
+  const currTrimmed = curr.length > MAX_CHARS ? curr.substring(0, MAX_CHARS) + ' [truncated]' : curr;
+
+  // Build prompt via array join — avoids template literal issues with special chars in transcripts
+  const promptLines = [
+    'You are a senior buy-side equity analyst. Analyze these two earnings call transcripts and identify meaningful changes.',
+    '',
+    'COMPANY: ' + company + ' | SECTOR: ' + sector + ' | FOCUS: ' + analysisTypes,
+    '',
+    '--- PREVIOUS QUARTER: ' + prevQ + ' ---',
+    prevTrimmed,
+    '',
+    '--- CURRENT QUARTER: ' + currQ + ' ---',
+    currTrimmed,
+    '',
+    'Respond with ONLY a JSON object. No text before or after it. No markdown code fences. Start with { end with }.',
+    '',
+    'Use this exact structure:',
+    '{',
+    '  "overallRiskScore": 65,',
+    '  "sentimentDelta": "-10",',
+    '  "executiveSummary": "2-3 sentence plain English summary of key signal changes.",',
+    '  "anomalies": [',
+    '    {',
+    '      "severity": "high",',
+    '      "category": "Language Shift",',
+    '      "title": "Short descriptive title",',
+    '      "signalScore": 80,',
+    '      "previousQuoteContext": "What management said or emphasized before",',
+    '      "currentQuoteContext": "What changed, softened, or was dropped",',
+    '      "analystInsight": "What this may signal to investors."',
+    '    }',
+    '  ],',
+    '  "toneMetrics": {',
+    '    "confidence": {"prev": 70, "curr": 55},',
+    '    "uncertainty": {"prev": 20, "curr": 40},',
+    '    "optimism": {"prev": 65, "curr": 50},',
+    '    "defensiveness": {"prev": 15, "curr": 30},',
+    '    "specificity": {"prev": 60, "curr": 45}',
+    '  },',
+    '  "vocabularyChanges": [',
+    '    {"word": "headwinds", "change": "added", "significance": "New cautious framing"}',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- 4 to 8 anomalies, ordered high severity first',
+    '- severity must be exactly: high, medium, or low',
+    '- change must be exactly: added, removed, increased, or decreased',
+    '- 6 to 8 vocabularyChanges entries',
+    '- Be specific, reference actual language patterns from the transcripts',
+  ];
+  const promptText = promptLines.join('\n');
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: promptText }]
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      const msg = data.error?.message || data.error || 'API returned status ' + res.status;
+      throw new Error(msg);
+    }
+
+    const raw = (data.content || []).map(b => b.text || '').join('').trim();
+    if (!raw) throw new Error('Empty response received from API');
+
+    // Parse JSON — try multiple strategies
+    let result;
+    const strategies = [
+      () => JSON.parse(raw),
+      () => JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()),
+      () => { const m = raw.match(/\{[\s\S]*\}/); if (!m) throw new Error('no JSON block found'); return JSON.parse(m[0]); },
+    ];
+    let lastErr;
+    for (const strategy of strategies) {
+      try { result = strategy(); break; } catch(e) { lastErr = e; }
+    }
+    if (!result) throw new Error('Could not parse AI response as JSON. ' + lastErr.message);
+
+    // Safe defaults for all fields
+    result.overallRiskScore = parseInt(result.overallRiskScore) || 50;
+    result.sentimentDelta = String(result.sentimentDelta || '0');
+    result.executiveSummary = result.executiveSummary || 'Analysis complete.';
+    result.anomalies = Array.isArray(result.anomalies) ? result.anomalies : [];
+    result.toneMetrics = result.toneMetrics || {
+      confidence: {prev:50,curr:50}, uncertainty: {prev:30,curr:30},
+      optimism: {prev:50,curr:50}, defensiveness: {prev:20,curr:20}, specificity: {prev:50,curr:50}
+    };
+    result.vocabularyChanges = Array.isArray(result.vocabularyChanges) ? result.vocabularyChanges : [];
+
+    clearInterval(statusInterval);
+    overlay.classList.remove('show');
+
+    appState.currentResult = {
+      id: Date.now(),
+      company, prevQ, currQ, sector,
+      ...result,
+      date: new Date().toISOString(),
+      anomalyCount: result.anomalies.length,
+    };
+    appState.history.unshift(appState.currentResult);
+    localStorage.setItem('st_history', JSON.stringify(appState.history.slice(0, 50)));
+
+    renderResults(appState.currentResult);
+    updateSidebarStats();
+    document.getElementById('navResults').style.display = 'flex';
+    showPage('results');
+
+  } catch (err) {
+    clearInterval(statusInterval);
+    overlay.classList.remove('show');
+    console.error('SignalTrace error:', err);
+    showErrorDetail(err.message);
+  }
+}
+
+function showErrorDetail(msg) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(8,8,6,0.95);display:flex;align-items:center;justify-content:center;padding:24px;font-family:var(--mono)';
+  el.innerHTML = '<div style="background:#141310;border:1px solid #e84040;border-radius:6px;padding:28px;max-width:560px;width:100%">'
+    + '<div style="font-size:0.6rem;letter-spacing:3px;color:#e84040;margin-bottom:12px">ANALYSIS ERROR</div>'
+    + '<div style="font-size:0.8rem;color:#f0ead8;margin-bottom:16px;line-height:1.6;word-break:break-word">' + msg + '</div>'
+    + '<div style="font-size:0.68rem;color:#5a5540;margin-bottom:20px;line-height:1.7">'
+    + 'If you see a network error: make sure ANTHROPIC_API_KEY is set in your Vercel environment variables.<br>'
+    + 'If you see a parse error: your transcript may have caused formatting issues — try shorter excerpts.'
+    + '</div>'
+    + '<button onclick="this.parentElement.parentElement.remove()" style="background:#f0a500;color:#080806;border:none;padding:8px 20px;border-radius:4px;font-family:var(--mono);font-size:0.72rem;cursor:pointer;letter-spacing:1px">DISMISS</button>'
+    + '</div>';
+  document.body.appendChild(el);
+}
+
+// ── RENDER RESULTS ─────────────────────────────────────────────
+function renderResults(r) {
+  // Header
+  document.getElementById('res-company').textContent = r.company;
+  document.getElementById('res-meta').textContent = `${r.prevQ} vs ${r.currQ} · ${r.sector?.replace(/-/g,' ').toUpperCase()}`;
+
+  // Meters
+  const score = r.overallRiskScore || 0;
+  const meterEl = document.getElementById('meter-overall');
+  document.getElementById('meter-overall-val').textContent = score;
+  meterEl.className = `signal-meter ${score >= 70 ? 'meter-red' : score >= 40 ? 'meter-amber' : 'meter-green'}`;
+
+  document.getElementById('meter-anomalies').textContent = r.anomalies?.length || 0;
+  document.getElementById('meter-high').textContent = r.anomalies?.filter(a => a.severity === 'high').length || 0;
+  const sd = parseInt(r.sentimentDelta || '0');
+  document.getElementById('meter-sentiment').textContent = (sd >= 0 ? '+' : '') + sd;
+  document.getElementById('meter-sentiment').style.color = sd > 0 ? 'var(--green)' : sd < 0 ? 'var(--red)' : 'var(--muted)';
+
+  // Summary
+  document.getElementById('res-summary').textContent = r.executiveSummary || '—';
+
+  // Anomalies
+  const container = document.getElementById('anomaliesContainer');
+  container.innerHTML = (r.anomalies || []).map(a => `
+    <div class="anomaly-card severity-${a.severity}">
+      <div class="anomaly-header">
+        <div>
+          <div class="anomaly-type-row">
+            <span class="severity-chip sev-${a.severity}">${a.severity}</span>
+            <span class="anomaly-category">${a.category}</span>
+          </div>
+          <div class="anomaly-title">${a.title}</div>
+        </div>
+        <div class="signal-score">
+          <div class="signal-num" style="color:${a.severity === 'high' ? 'var(--red)' : a.severity === 'medium' ? 'var(--amber)' : 'var(--blue)'}">${a.signalScore}</div>
+          <div class="signal-label">SIGNAL</div>
+        </div>
+      </div>
+      <div class="anomaly-body">
+        <div class="anomaly-comparison">
+          <div class="comparison-block comp-prev">
+            <div class="comp-label">◈ ${r.prevQ}</div>
+            <div class="comp-text">${a.previousQuoteContext}</div>
+          </div>
+          <div class="comparison-block">
+            <div class="comp-label">◈ ${r.currQ}</div>
+            <div class="comp-text">${a.currentQuoteContext}</div>
+          </div>
+        </div>
+        <div class="anomaly-insight">
+          <div class="insight-label">▶ ANALYST INSIGHT</div>
+          ${a.analystInsight}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Tone chart
+  const tm = r.toneMetrics || {};
+  const toneKeys = ['confidence', 'uncertainty', 'optimism', 'defensiveness', 'specificity'];
+  document.getElementById('toneChart').innerHTML = toneKeys.map(k => {
+    const prev = tm[k]?.prev || 0;
+    const curr = tm[k]?.curr || 0;
+    const delta = curr - prev;
+    const deltaClass = delta > 5 ? 'delta-up' : delta < -5 ? 'delta-dn' : 'delta-neu';
+    const deltaSign = delta > 0 ? '+' : '';
+    return `<div class="tone-bar-row">
+      <div class="tone-bar-label">${k}</div>
+      <div class="tone-bar-track">
+        <div class="tone-bar-prev" style="width:${prev}%"></div>
+        <div class="tone-bar-curr" style="width:${curr}%"></div>
+      </div>
+      <div class="tone-bar-vals">${prev}→${curr}</div>
+      <div class="tone-bar-delta ${deltaClass}">${deltaSign}${delta}</div>
+    </div>`;
+  }).join('');
+
+  // Vocab changes
+  const changes = r.vocabularyChanges || [];
+  document.getElementById('wordList').innerHTML = changes.map(c => {
+    const cls = c.change === 'added' || c.change === 'increased' ? 'wi-added' : c.change === 'removed' || c.change === 'decreased' ? 'wi-removed' : 'wi-neutral';
+    const icon = c.change === 'added' ? '+ ADDED' : c.change === 'removed' ? '— REMOVED' : c.change === 'increased' ? '↑ MORE' : '↓ LESS';
+    return `<div class="word-item">
+      <div class="word-item-text">"${c.word}"</div>
+      <div class="word-item-change">
+        <span style="color:var(--muted);font-size:0.58rem">${c.significance?.substring(0,30)}</span>
+        <span class="${cls}">${icon}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── HISTORY ────────────────────────────────────────────────────
+function renderHistory() {
+  const container = document.getElementById('historyContainer');
+  if (!appState.history.length) {
+    container.innerHTML = `<div style="text-align:center;padding:60px;color:var(--muted);font-size:0.72rem;letter-spacing:1px">NO ANALYSES IN HISTORY — RUN YOUR FIRST ANALYSIS TO BEGIN</div>`;
+    return;
+  }
+  container.innerHTML = appState.history.map(item => {
+    const d = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const score = item.overallRiskScore || 0;
+    const scoreColor = score >= 70 ? 'var(--red)' : score >= 40 ? 'var(--amber)' : 'var(--green)';
+    const highCount = item.anomalies?.filter(a => a.severity === 'high').length || 0;
+    return `<div class="h-item" onclick="loadHistoryItem(${item.id})">
+      <div class="h-company">${item.company}<br><span style="font-size:0.65rem;font-weight:400;color:var(--muted)">${item.prevQ} vs ${item.currQ}</span></div>
+      <div class="h-badges">
+        ${highCount > 0 ? `<span class="h-badge" style="background:var(--red-dim);color:var(--red)">${highCount} HIGH</span>` : ''}
+        <span class="h-badge" style="background:var(--amber-dim);color:var(--amber)">${item.anomalyCount} ANOMALIES</span>
+      </div>
+      <div class="h-meta">${d} · ${item.sector?.replace(/-/g,' ').toUpperCase()}</div>
+      <div class="h-score" style="color:${scoreColor}">${score}</div>
+    </div>`;
+  }).join('');
+}
+
+function loadHistoryItem(id) {
+  const item = appState.history.find(h => h.id === id);
+  if (!item) return;
+  appState.currentResult = item;
+  renderResults(item);
+  document.getElementById('navResults').style.display = 'flex';
+  showPage('results');
+}
+
+// ── EXPORT ────────────────────────────────────────────────────
+function copyResults() {
+  if (!appState.currentResult) return;
+  const r = appState.currentResult;
+  const text = [
+    `SIGNTRACE ANALYSIS REPORT`,
+    `Company: ${r.company} | ${r.prevQ} vs ${r.currQ}`,
+    `Risk Score: ${r.overallRiskScore}/100 | Anomalies: ${r.anomalyCount} | Sentiment Δ: ${r.sentimentDelta}`,
+    ``,
+    `EXECUTIVE SUMMARY`,
+    r.executiveSummary,
+    ``,
+    `ANOMALIES DETECTED (${r.anomalies?.length})`,
+    ...(r.anomalies || []).map((a, i) =>
+      `\n[${i+1}] ${a.severity.toUpperCase()} | ${a.category} | Signal: ${a.signalScore}\n${a.title}\nPrev: ${a.previousQuoteContext}\nCurr: ${a.currentQuoteContext}\nInsight: ${a.analystInsight}`
+    ),
+  ].join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast('REPORT COPIED TO CLIPBOARD'));
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+function updateSidebarStats() {
+  const total = appState.history.length;
+  const anomalies = appState.history.reduce((s, h) => s + (h.anomalyCount || 0), 0);
+  const high = appState.history.reduce((s, h) => s + (h.anomalies?.filter(a => a.severity === 'high').length || 0), 0);
+  document.getElementById('ssStat1').textContent = total;
+  document.getElementById('ssStat2').textContent = anomalies;
+  document.getElementById('ssStat3').textContent = high;
+}
+
+// ── TOAST ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateSidebarStats();
+  if (appState.history.length > 0) {
+    document.getElementById('navResults').style.display = 'flex';
+  }
+});
+</script>
+</body>
+</html>
